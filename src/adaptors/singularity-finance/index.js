@@ -29,12 +29,34 @@ const chainConfig = {
 };
 
 async function getApy() {
-  const results = await Promise.all(
-    Object.entries(vaultRegistry).map(([chainId, registry]) =>
-      getChainApy(chainId, registry)
-    )
+  const chains = Object.entries(vaultRegistry);
+  const results = await Promise.allSettled(
+    chains.map(([chainId, registry]) => getChainApy(chainId, registry))
   );
-  return results.flat();
+  const pools = [];
+  const errors = [];
+
+  results.forEach((result, index) => {
+    if (result.status === 'fulfilled') {
+      pools.push(...result.value);
+    } else {
+      const { chain } = chainConfig[chains[index][0]];
+      console.error(
+        `[singularity-finance] Failed to fetch APY for ${chain}:`,
+        result.reason
+      );
+      errors.push(result.reason);
+    }
+  });
+
+  if (errors.length === chains.length) {
+    throw new AggregateError(
+      errors,
+      'Failed to fetch Singularity Finance APY for every chain'
+    );
+  }
+
+  return pools;
 }
 
 async function getChainApy(chainId, registry) {
